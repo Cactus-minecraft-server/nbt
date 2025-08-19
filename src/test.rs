@@ -1,5 +1,3 @@
-// src/test.rs
-
 use crate::{Tag, read_nbt, write_nbt};
 
 #[test]

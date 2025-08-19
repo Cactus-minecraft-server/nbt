@@ -1,7 +1,6 @@
-// src/lib.rs
-
 use std::collections::HashMap;
 pub mod io;
+#[cfg(test)]
 mod test;
 pub use io::{Reader, Writer};
 

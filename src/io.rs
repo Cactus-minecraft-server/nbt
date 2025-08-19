@@ -1,5 +1,3 @@
-// src/io.rs
-
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind, Read, Result, Write},
