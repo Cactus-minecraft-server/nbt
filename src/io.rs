@@ -4,12 +4,28 @@ use std::{
 };
 
 use crate::{Tag, TagId};
+use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 
 /// Binary reader for NBT format
 pub struct Reader<R: Read> {
     inner: R,
 }
 
+// --- Reader gzip ---
+impl<R: Read> Reader<GzDecoder<R>> {
+    pub fn from_gzip(inner: R) -> Self {
+        Reader {
+            inner: GzDecoder::new(inner),
+        }
+    }
+}
+impl<W: Write> Writer<GzEncoder<W>> {
+    pub fn to_gzip(inner: W) -> Self {
+        Writer {
+            inner: GzEncoder::new(inner, Compression::default()),
+        }
+    }
+}
 impl<R: Read> Reader<R> {
     pub fn new(inner: R) -> Self {
         Reader { inner }
@@ -134,13 +150,22 @@ impl<R: Read> Reader<R> {
         Ok(i64::from_be_bytes(buf))
     }
     fn read_f32(&mut self) -> Result<f32> {
-        Ok(f32::from_bits(self.read_i32()? as u32))
+        let mut b = [0u8; 4];
+        self.inner.read_exact(&mut b)?;
+        Ok(f32::from_bits(u32::from_be_bytes(b)))
     }
     fn read_f64(&mut self) -> Result<f64> {
-        Ok(f64::from_bits(self.read_i64()? as u64))
+        let mut b = [0u8; 8];
+        self.inner.read_exact(&mut b)?;
+        Ok(f64::from_bits(u64::from_be_bytes(b)))
+    }
+    fn read_u16(&mut self) -> Result<u16> {
+        let mut b = [0u8; 2];
+        self.inner.read_exact(&mut b)?;
+        Ok(u16::from_be_bytes(b))
     }
     fn read_string(&mut self) -> Result<String> {
-        let len = self.read_i16()? as usize;
+        let len = self.read_u16()? as usize;
         let mut buf = vec![0u8; len];
         self.inner.read_exact(&mut buf)?;
         String::from_utf8(buf).map_err(|e| Error::new(ErrorKind::InvalidData, e))
@@ -240,14 +265,17 @@ impl<W: Write> Writer<W> {
         self.inner.write_all(&v.to_be_bytes())
     }
     fn write_f32(&mut self, v: f32) -> Result<()> {
-        self.write_i32(v.to_bits() as i32)
+        self.inner.write_all(&v.to_bits().to_be_bytes())
     }
     fn write_f64(&mut self, v: f64) -> Result<()> {
-        self.write_i64(v.to_bits() as i64)
+        self.inner.write_all(&v.to_bits().to_be_bytes())
     }
     fn write_string(&mut self, s: &str) -> Result<()> {
         let bytes = s.as_bytes();
-        self.write_i16(bytes.len() as i16)?;
+        if bytes.len() > u16::MAX as usize {
+            return Err(Error::new(ErrorKind::InvalidInput, "string too long"));
+        }
+        self.inner.write_all(&(bytes.len() as u16).to_be_bytes())?;
         self.inner.write_all(bytes)
     }
 }
